@@ -10,14 +10,13 @@ import { AuthRequest } from "../types";
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
-  workspaceId: z.string().min(1, "Workspace selection is required"),
 });
 
 const registerSchema = z.object({
   name: z.string().min(1, "Full name is required").max(100, "Name is too long"),
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  workspaceId: z.string().min(1, "Workspace selection is required"),
+  workspaceName: z.string().min(1, "Organization name is required").max(100, "Organization name is too long"),
 });
 
 export async function login(req: AuthRequest, res: Response): Promise<void> {
@@ -27,15 +26,16 @@ export async function login(req: AuthRequest, res: Response): Promise<void> {
     return;
   }
 
-  const { email, password, workspaceId } = result.data;
+  const { email, password } = result.data;
+  const normalizedEmail = email.trim().toLowerCase();
 
   try {
     const userResult = await pool.query(
       `SELECT u.*, w.name as workspace_name
        FROM users u
        JOIN workspaces w ON u.workspace_id = w.id
-       WHERE u.email = $1`,
-      [email]
+       WHERE LOWER(u.email) = $1`,
+      [normalizedEmail]
     );
 
     const user = userResult.rows[0];
@@ -48,12 +48,6 @@ export async function login(req: AuthRequest, res: Response): Promise<void> {
     const isPasswordValid = bcrypt.compareSync(password, user.password);
     if (!isPasswordValid) {
       res.status(401).json({ error: "Invalid credentials" });
-      return;
-    }
-
-    // Verify user actually belongs to the selected workspace
-    if (user.workspace_id !== workspaceId) {
-      res.status(401).json({ error: "Invalid credentials or workspace selection" });
       return;
     }
 
@@ -131,11 +125,12 @@ export async function register(req: AuthRequest, res: Response): Promise<void> {
     return;
   }
 
-  const { name, email, password, workspaceId } = result.data;
+  const { name, email, password, workspaceName } = result.data;
   const normalizedEmail = email.trim().toLowerCase();
+  const trimmedWorkspaceName = workspaceName.trim();
 
+  // Check for duplicate email BEFORE opening a transaction
   try {
-    // Check for duplicate email
     const existing = await pool.query(
       "SELECT id FROM users WHERE email = $1",
       [normalizedEmail]
@@ -144,27 +139,37 @@ export async function register(req: AuthRequest, res: Response): Promise<void> {
       res.status(409).json({ error: "An account with this email already exists" });
       return;
     }
+  } catch (error) {
+    console.error("Registration error:", error);
+    res.status(500).json({ error: "Internal server error" });
+    return;
+  }
 
-    // Verify workspace exists in workspaces table
-    const wsResult = await pool.query(
-      "SELECT id FROM workspaces WHERE id = $1",
-      [workspaceId]
+  // Atomically create workspace + user in one transaction
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // 1. Create the new workspace
+    const newWorkspaceId = randomUUID();
+    const now = new Date().toISOString();
+    await client.query(
+      `INSERT INTO workspaces (id, name, created_at) VALUES ($1, $2, $3)`,
+      [newWorkspaceId, trimmedWorkspaceName, now]
     );
-    if (wsResult.rows.length === 0) {
-      res.status(400).json({ error: "Invalid workspace selection" });
-      return;
-    }
 
-    // Hash password — never store plain text
+    // 2. Hash password — never store plain text
     const passwordHash = await bcrypt.hash(password, 10);
     const newUserId = randomUUID();
-    const now = new Date().toISOString();
 
-    await pool.query(
+    // 3. Create the user, assigned to the new workspace
+    await client.query(
       `INSERT INTO users (id, workspace_id, email, password, name, role, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [newUserId, workspaceId, normalizedEmail, passwordHash, name.trim(), "member", now]
+      [newUserId, newWorkspaceId, normalizedEmail, passwordHash, name.trim(), "admin", now]
     );
+
+    await client.query("COMMIT");
 
     // Return safe user info — password/hash is NEVER included
     res.status(201).json({
@@ -173,12 +178,16 @@ export async function register(req: AuthRequest, res: Response): Promise<void> {
         id: newUserId,
         email: normalizedEmail,
         name: name.trim(),
-        workspaceId: workspaceId,
-        role: "member",
+        workspaceId: newWorkspaceId,
+        workspaceName: trimmedWorkspaceName,
+        role: "admin",
       },
     });
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error("Registration error:", error);
     res.status(500).json({ error: "Internal server error" });
+  } finally {
+    client.release();
   }
 }

@@ -1,22 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Mail, Lock, Building2, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
-import { login, getWorkspaces } from "../services/api";
-import type { Workspace } from "../types";
+import { Mail, Lock, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
+import { login } from "../services/api";
 import { DeskFlowLogo } from "../components/DeskFlowLogo";
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
 
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [workspaceId, setWorkspaceId] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [loadingWorkspaces, setLoadingWorkspaces] = useState(true);
   const [errors, setErrors] = useState<{
-    workspaceId?: string;
     email?: string;
     password?: string;
     general?: string;
@@ -24,34 +19,10 @@ export const Login: React.FC = () => {
 
   useEffect(() => {
     document.title = "DeskFlow — Sign In";
-    let isMounted = true;
-    getWorkspaces()
-      .then((data) => {
-        if (isMounted) {
-          setWorkspaces(data);
-          if (data.length > 0) {
-            // Default to empty selection so user must explicitly choose, or preselect if wanted
-            // Requirement specifies: Workspace dropdown with "[ Select workspace ]" or options
-          }
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to fetch workspaces:", err);
-      })
-      .finally(() => {
-        if (isMounted) setLoadingWorkspaces(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   const validate = (): boolean => {
     const newErrors: typeof errors = {};
-    if (!workspaceId) {
-      newErrors.workspaceId = "Please select a workspace";
-    }
     if (!email.trim()) {
       newErrors.email = "Email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -70,21 +41,20 @@ export const Login: React.FC = () => {
     setLoading(true);
     setErrors({});
     try {
-      const response = await login(email.trim(), password, workspaceId);
+      const response = await login(email.trim(), password);
       localStorage.setItem("token", response.token);
       localStorage.setItem("user", JSON.stringify(response.user));
       navigate("/dashboard");
     } catch (err: any) {
-      setErrors({ general: err.message || "Login failed. Please check your credentials and workspace." });
+      setErrors({ general: err.message || "Login failed. Please check your credentials." });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleQuickFill = (demoEmail: string, demoWsId: string) => {
+  const handleQuickFill = (demoEmail: string) => {
     setEmail(demoEmail);
     setPassword("password123");
-    setWorkspaceId(demoWsId);
     setErrors({});
   };
 
@@ -114,40 +84,6 @@ export const Login: React.FC = () => {
 
         {/* Form */}
         <form onSubmit={handleSubmit} noValidate style={form}>
-          {/* Workspace dropdown */}
-          <div style={fieldGroup}>
-            <label htmlFor="login-workspace" style={label}>
-              Workspace
-            </label>
-            <div style={inputWrapper}>
-              <Building2 size={16} style={inputIcon} />
-              <select
-                id="login-workspace"
-                value={workspaceId}
-                onChange={(e) => setWorkspaceId(e.target.value)}
-                disabled={loading || loadingWorkspaces}
-                style={{
-                  ...inputBase,
-                  borderColor: errors.workspaceId ? "#ef4444" : "#d1d5db",
-                  appearance: "none",
-                  backgroundColor: "#ffffff",
-                  cursor: "pointer",
-                }}
-              >
-                <option value="" disabled>
-                  {loadingWorkspaces ? "Loading workspaces..." : "Select workspace"}
-                </option>
-                {workspaces.map((ws) => (
-                  <option key={ws.id} value={ws.id}>
-                    {ws.name}
-                  </option>
-                ))}
-              </select>
-              <div style={selectArrow}>▼</div>
-            </div>
-            {errors.workspaceId && <span style={fieldError}>{errors.workspaceId}</span>}
-          </div>
-
           {/* Email */}
           <div style={fieldGroup}>
             <label htmlFor="login-email" style={label}>
@@ -234,13 +170,13 @@ export const Login: React.FC = () => {
         </div>
         <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
           {[
-            { email: "aarav@brightpath.demo", wsId: "ws-1", label: "BrightPath (Aarav)" },
-            { email: "ananya@novaworks.demo", wsId: "ws-2", label: "NovaWorks (Ananya)" },
-          ].map(({ email: dEmail, wsId: dWsId, label: dLabel }) => (
+            { email: "aarav@brightpath.demo", label: "BrightPath (Aarav)" },
+            { email: "ananya@novaworks.demo", label: "NovaWorks (Ananya)" },
+          ].map(({ email: dEmail, label: dLabel }) => (
             <button
               key={dEmail}
               type="button"
-              onClick={() => handleQuickFill(dEmail, dWsId)}
+              onClick={() => handleQuickFill(dEmail)}
               disabled={loading}
               style={demoBtn}
             >
@@ -327,14 +263,6 @@ const inputIcon: React.CSSProperties = {
   color: "#94a3b8",
   pointerEvents: "none",
   zIndex: 1,
-};
-
-const selectArrow: React.CSSProperties = {
-  position: "absolute",
-  right: 12,
-  fontSize: 10,
-  color: "#94a3b8",
-  pointerEvents: "none",
 };
 
 const inputBase: React.CSSProperties = {

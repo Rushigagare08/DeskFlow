@@ -65,24 +65,24 @@ export async function getWorkspaces(): Promise<Workspace[]> {
 }
 
 // 1. Login
-export async function login(email: string, password: string, workspaceId: string): Promise<LoginResponse> {
+export async function login(email: string, password: string): Promise<LoginResponse> {
   return request<LoginResponse>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password, workspaceId }),
+    body: JSON.stringify({ email, password }),
     requiresAuth: false,
   });
 }
 
-// 1b. Register new account
+// 1b. Register new account (creates a new workspace automatically)
 export async function register(
   name: string,
   email: string,
   password: string,
-  workspaceId: string
+  workspaceName: string
 ): Promise<{ message: string; user: User }> {
   return request<{ message: string; user: User }>("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ name, email, password, workspaceId }),
+    body: JSON.stringify({ name, email, password, workspaceName }),
     requiresAuth: false,
   });
 }

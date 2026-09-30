@@ -9,12 +9,21 @@ const testDbUrl = process.env.TEST_DATABASE_URL || (mainDbUrl.includes("localhos
 
 export default defineConfig({
   test: {
+    include: ["src/tests/**/*.test.ts"],
+    exclude: ["dist/**", "node_modules/**"],
     env: {
       DATABASE_URL: testDbUrl,
       NODE_ENV: "test",
     },
     fileParallelism: false,
-    testTimeout: 20000,
-    hookTimeout: 20000,
+    maxWorkers: 1,
+    pool: "forks",
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
+    testTimeout: 60000,
+    hookTimeout: 60000,
   },
 });

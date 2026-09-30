@@ -18,13 +18,12 @@ describe("TEST 1 — Authentication & Workspace Selection", () => {
     expect(res.body[0]).not.toHaveProperty("password");
   });
 
-  it("1. Login with correct user + correct workspace → SUCCESS", async () => {
+  it("1. Login with email and password (no workspaceId required) → SUCCESS (resolves ws-1)", async () => {
     const response = await request(app)
       .post("/api/auth/login")
       .send({
         email: "aarav@brightpath.demo",
         password: "password123",
-        workspaceId: "ws-1",
       });
 
     expect(response.status).toBe(200);
@@ -42,24 +41,39 @@ describe("TEST 1 — Authentication & Workspace Selection", () => {
     });
   });
 
-  it("2. Login with correct user + wrong workspace → FAIL (401)", async () => {
+  it("2. Login with NovaWorks user → resolves ws-2 automatically", async () => {
+    const response = await request(app)
+      .post("/api/auth/login")
+      .send({
+        email: "ananya@novaworks.demo",
+        password: "password123",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.user).toMatchObject({
+      id: "user-2",
+      email: "ananya@novaworks.demo",
+      workspaceId: "ws-2",
+      workspaceName: "NovaWorks Consulting",
+    });
+  });
+
+  it("3. Login with invalid password → FAIL (401)", async () => {
     const response = await request(app)
       .post("/api/auth/login")
       .send({
         email: "aarav@brightpath.demo",
-        password: "password123",
-        workspaceId: "ws-2", // Wrong workspace! Aarav belongs to ws-1
+        password: "wrongpassword",
       });
 
     expect(response.status).toBe(401);
-    expect(response.body).toHaveProperty("error");
+    expect(response.body).toHaveProperty("error", "Invalid credentials");
   });
 
-  it("Login missing workspaceId → FAIL (400)", async () => {
+  it("4. Login missing email → FAIL (400)", async () => {
     const response = await request(app)
       .post("/api/auth/login")
       .send({
-        email: "aarav@brightpath.demo",
         password: "password123",
       });
 

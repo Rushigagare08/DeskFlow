@@ -11,15 +11,13 @@ import {
   EyeOff,
   CheckCircle2,
 } from "lucide-react";
-import { register, getWorkspaces } from "../services/api";
-import type { Workspace } from "../types";
+import { register } from "../services/api";
 import { DeskFlowLogo } from "../components/DeskFlowLogo";
 
 export const Register: React.FC = () => {
   const navigate = useNavigate();
 
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [workspaceId, setWorkspaceId] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,11 +25,10 @@ export const Register: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [loadingWorkspaces, setLoadingWorkspaces] = useState(true);
   const [success, setSuccess] = useState(false);
   const [errors, setErrors] = useState<{
     name?: string;
-    workspaceId?: string;
+    workspaceName?: string;
     email?: string;
     password?: string;
     confirmPassword?: string;
@@ -40,29 +37,16 @@ export const Register: React.FC = () => {
 
   useEffect(() => {
     document.title = "DeskFlow — Create Account";
-    let isMounted = true;
-    getWorkspaces()
-      .then((data) => {
-        if (isMounted) {
-          setWorkspaces(data);
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to fetch workspaces:", err);
-      })
-      .finally(() => {
-        if (isMounted) setLoadingWorkspaces(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   const validate = (): boolean => {
     const newErrors: typeof errors = {};
     if (!name.trim()) newErrors.name = "Full name is required";
-    if (!workspaceId) newErrors.workspaceId = "Please select a workspace";
+    if (!workspaceName.trim()) {
+      newErrors.workspaceName = "Organization name is required";
+    } else if (workspaceName.trim().length > 100) {
+      newErrors.workspaceName = "Organization name must be 100 characters or fewer";
+    }
     if (!email.trim()) {
       newErrors.email = "Email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -88,7 +72,7 @@ export const Register: React.FC = () => {
     setLoading(true);
     setErrors({});
     try {
-      await register(name.trim(), email.trim(), password, workspaceId);
+      await register(name.trim(), email.trim(), password, workspaceName.trim());
       setSuccess(true);
       setTimeout(() => navigate("/login"), 2500);
     } catch (err: any) {
@@ -176,38 +160,29 @@ export const Register: React.FC = () => {
             {errors.name && <span style={fieldError}>{errors.name}</span>}
           </div>
 
-          {/* Workspace */}
+          {/* Organization Name */}
           <div style={fieldGroup}>
             <label htmlFor="reg-workspace" style={labelStyle}>
-              Workspace <span style={{ color: "#dc2626" }}>*</span>
+              Organization Name <span style={{ color: "#dc2626" }}>*</span>
             </label>
             <div style={inputWrapper}>
               <Building2 size={16} style={inputIcon} />
-              <select
+              <input
                 id="reg-workspace"
-                value={workspaceId}
-                onChange={(e) => setWorkspaceId(e.target.value)}
-                disabled={loading || loadingWorkspaces}
+                type="text"
+                autoComplete="organization"
+                placeholder="e.g. Acme Corp"
+                value={workspaceName}
+                onChange={(e) => setWorkspaceName(e.target.value)}
+                disabled={loading}
+                maxLength={100}
                 style={{
                   ...inputBase,
-                  borderColor: errors.workspaceId ? "#ef4444" : "#d1d5db",
-                  appearance: "none",
-                  backgroundColor: "#ffffff",
-                  cursor: "pointer",
+                  borderColor: errors.workspaceName ? "#ef4444" : "#d1d5db",
                 }}
-              >
-                <option value="" disabled>
-                  {loadingWorkspaces ? "Loading workspaces..." : "Select workspace"}
-                </option>
-                {workspaces.map((ws) => (
-                  <option key={ws.id} value={ws.id}>
-                    {ws.name}
-                  </option>
-                ))}
-              </select>
-              <div style={selectArrow}>▼</div>
+              />
             </div>
-            {errors.workspaceId && <span style={fieldError}>{errors.workspaceId}</span>}
+            {errors.workspaceName && <span style={fieldError}>{errors.workspaceName}</span>}
           </div>
 
           {/* Email */}
@@ -394,13 +369,7 @@ const inputIcon: React.CSSProperties = {
   zIndex: 1,
 };
 
-const selectArrow: React.CSSProperties = {
-  position: "absolute",
-  right: 12,
-  fontSize: 10,
-  color: "#94a3b8",
-  pointerEvents: "none",
-};
+
 
 const inputBase: React.CSSProperties = {
   width: "100%",
