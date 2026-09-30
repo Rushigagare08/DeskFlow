@@ -1,4 +1,3 @@
-Yes. For a **short README**, you can reduce it to this:
 
 ````markdown
 # DeskFlow — Client Request Desk
